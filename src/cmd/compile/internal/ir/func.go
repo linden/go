@@ -160,7 +160,8 @@ type WasmImport struct {
 
 // WasmExport stores metadata associated with the //go:wasmexport pragma.
 type WasmExport struct {
-	Name string
+	Name  string
+	Async bool
 }
 
 // NewFunc returns a new Func with the given name and type.

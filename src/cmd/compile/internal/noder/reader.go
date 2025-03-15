@@ -1144,6 +1144,7 @@ func (r *reader) funcExt(name *ir.Name, method *types.Sym) {
 		importmod := r.String()
 		importname := r.String()
 		exportname := r.String()
+		async := r.Bool()
 
 		if importmod != "" && importname != "" {
 			fn.WasmImport = &ir.WasmImport{
@@ -1155,7 +1156,7 @@ func (r *reader) funcExt(name *ir.Name, method *types.Sym) {
 			if method != nil {
 				base.ErrorfAt(fn.Pos(), 0, "cannot use //go:wasmexport on a method")
 			}
-			fn.WasmExport = &ir.WasmExport{Name: exportname}
+			fn.WasmExport = &ir.WasmExport{Name: exportname, Async: async}
 		}
 	}
 

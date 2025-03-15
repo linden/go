@@ -280,8 +280,10 @@ func (l *linker) relocFuncExt(w *pkgbits.Encoder, name *ir.Name) {
 		}
 		if name.Func.WasmExport != nil {
 			w.String(name.Func.WasmExport.Name)
+			w.Bool(name.Func.WasmExport.Async)
 		} else {
 			w.String("")
+			w.Bool(false)
 		}
 	}
 

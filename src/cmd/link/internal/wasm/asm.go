@@ -68,6 +68,7 @@ func readWasmImport(ldr *loader.Loader, s loader.Sym) obj.WasmImport {
 var wasmFuncTypes = map[string]*wasmFuncType{
 	"_rt0_wasm_js":            {Params: []byte{}},                                         //
 	"_rt0_wasm_wasip1":        {Params: []byte{}},                                         //
+	"wasm_export_getsuspend":  {Results: []byte{I32}},                                     // sp
 	"_rt0_wasm_wasip1_lib":    {Params: []byte{}},                                         //
 	"wasm_export__start":      {},                                                         //
 	"wasm_export_run":         {Params: []byte{I32, I32}},                                 // argc, argv
@@ -391,6 +392,8 @@ func writeGlobalSec(ctxt *ld.Link) {
 		I64, // 5: RET2
 		I64, // 6: RET3
 		I32, // 7: PAUSE
+		I32, // 8: SUSPEND
+
 	}
 
 	writeUleb128(ctxt.Out, uint64(len(globalRegs))) // number of globals
@@ -418,7 +421,7 @@ func writeExportSec(ctxt *ld.Link, ldr *loader.Loader, lenHostImports int) {
 
 	switch buildcfg.GOOS {
 	case "wasip1":
-		writeUleb128(ctxt.Out, uint64(3+len(ldr.WasmExports))) // number of exports
+		writeUleb128(ctxt.Out, uint64(4+len(ldr.WasmExports))) // number of exports
 		var entry, entryExpName string
 		switch ctxt.BuildMode {
 		case ld.BuildModeExe:
@@ -442,6 +445,14 @@ func writeExportSec(ctxt *ld.Link, ldr *loader.Loader, lenHostImports int) {
 		}
 		idx = uint32(lenHostImports) + uint32(ldr.SymValue(s)>>16) - funcValueOffset
 		writeName(ctxt.Out, "resume")       // the wasi entrypoint
+		ctxt.Out.WriteByte(0x00)            // func export
+		writeUleb128(ctxt.Out, uint64(idx)) // funcidx
+		s = ldr.Lookup("wasm_export_getsuspend", 0)
+		if s == 0 {
+			ld.Errorf("export symbol wasm_export_getsuspend not defined")
+		}
+		idx = uint32(lenHostImports) + uint32(ldr.SymValue(s)>>16) - funcValueOffset
+		writeName(ctxt.Out, "getsuspend")   // the wasi entrypoint
 		ctxt.Out.WriteByte(0x00)            // func export
 		writeUleb128(ctxt.Out, uint64(idx)) // funcidx
 		for _, s := range ldr.WasmExports {

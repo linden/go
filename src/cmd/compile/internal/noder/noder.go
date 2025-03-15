@@ -184,8 +184,9 @@ type WasmImport struct {
 
 // WasmExport stores metadata associated with the //go:wasmexport pragma
 type WasmExport struct {
-	Pos  syntax.Pos
-	Name string
+	Pos   syntax.Pos
+	Name  string
+	Async bool
 }
 
 type pragmaPos struct {
@@ -260,17 +261,25 @@ func (p *noder) pragma(pos syntax.Pos, blankLine bool, text string, old syntax.P
 
 	case strings.HasPrefix(text, "go:wasmexport "):
 		f := strings.Fields(text)
-		if len(f) != 2 {
+		if len(f) != 2 && len(f) != 3 {
 			// TODO: maybe make the name optional? It was once mentioned on proposal 65199.
-			p.error(syntax.Error{Pos: pos, Msg: "usage: //go:wasmexport exportname"})
+			p.error(syntax.Error{Pos: pos, Msg: "usage: //go:wasmexport exportname [async]"})
 			break
+		}
+
+		async := false
+
+		// Optionally check if the export is async.
+		if len(f) == 3 && f[2] == "async" {
+			async = true
 		}
 
 		if buildcfg.GOARCH == "wasm" {
 			// Only actually use them if we're compiling to WASM though.
 			pragma.WasmExport = &WasmExport{
-				Pos:  pos,
-				Name: f[1],
+				Pos:   pos,
+				Name:  f[1],
+				Async: async,
 			}
 		}
 

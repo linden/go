@@ -14,17 +14,19 @@ import (
 	"internal/abi"
 	"io"
 	"math"
+	"strings"
 )
 
 var Register = map[string]int16{
-	"SP":    REG_SP,
-	"CTXT":  REG_CTXT,
-	"g":     REG_g,
-	"RET0":  REG_RET0,
-	"RET1":  REG_RET1,
-	"RET2":  REG_RET2,
-	"RET3":  REG_RET3,
-	"PAUSE": REG_PAUSE,
+	"SP":      REG_SP,
+	"CTXT":    REG_CTXT,
+	"g":       REG_g,
+	"RET0":    REG_RET0,
+	"RET1":    REG_RET1,
+	"RET2":    REG_RET2,
+	"RET3":    REG_RET3,
+	"PAUSE":   REG_PAUSE,
+	"SUSPEND": REG_SUSPEND, // TODO: rename to `ASYNC_STATE` (?).
 
 	"R0":  REG_R0,
 	"R1":  REG_R1,
@@ -924,6 +926,68 @@ func genWasmImportWrapper(s *obj.LSym, appendp func(p *obj.Prog, as obj.As, args
 	p = appendp(p, obj.ARET)
 }
 
+// TODO: few comments, lot of duplicate of `genWasmExportWrapper`.
+func genAsyncWasmExportWrapper(s *obj.LSym, we *obj.WasmExport, p *obj.Prog, framesize int64, appendp func(p *obj.Prog, as obj.As, args ...obj.Addr) *obj.Prog) {
+	exp := p.Ctxt.Lookup(strings.TrimSuffix(s.Name, "_resume"))
+
+	retAddr := obj.Addr{
+		Type:   obj.TYPE_ADDR,
+		Name:   obj.NAME_EXTERN,
+		Sym:    exp, // PC_F
+		Offset: 1,   // PC_B=1, past the prologue, so we have the right SP delta
+	}
+	if framesize == 0 {
+		// Frameless function, no prologue.
+		retAddr.Offset = 0
+	}
+
+	off := int64(8)
+
+	if framesize > 0 {
+		off = framesize - 8
+	}
+
+	if off > 0 {
+		p = appendp(p, AGet, regAddr(REG_SP))
+		p = appendp(p, AI32Const, constAddr(off))
+		p = appendp(p, AI32Sub)
+		p = appendp(p, ASet, regAddr(REG_SP))
+	}
+
+	p = appendp(p, AI64Const, retAddr)
+	p = appendp(p, AI64Const, constAddr(16))
+	p = appendp(p, AI64ShrU)
+	p = appendp(p, AI32WrapI64)
+
+	p = appendp(p, ACall, obj.Addr{Type: obj.TYPE_MEM, Name: obj.NAME_EXTERN, Sym: wasm_pc_f_loop_export})
+
+	// Load result
+	if len(we.Results) > 1 {
+		panic("invalid results type")
+	} else if len(we.Results) == 1 {
+		p = appendp(p, AGet, regAddr(REG_SP))
+		f := we.Results[0]
+		switch f.Type {
+		case obj.WasmI32:
+			p = appendp(p, AI32Load, constAddr(f.Offset))
+		case obj.WasmI64:
+			p = appendp(p, AI64Load, constAddr(f.Offset))
+		case obj.WasmF32:
+			p = appendp(p, AF32Load, constAddr(f.Offset))
+		case obj.WasmF64:
+			p = appendp(p, AF64Load, constAddr(f.Offset))
+		case obj.WasmPtr:
+			p = appendp(p, AI32Load, constAddr(f.Offset))
+		case obj.WasmBool:
+			p = appendp(p, AI32Load8U, constAddr(f.Offset))
+		default:
+			panic("bad result type")
+		}
+	}
+
+	p = appendp(p, AReturn)
+}
+
 // Generate function body for wasmexport wrapper function.
 func genWasmExportWrapper(s *obj.LSym, appendp func(p *obj.Prog, as obj.As, args ...obj.Addr) *obj.Prog) {
 	we := s.Func().WasmExport
@@ -935,6 +999,11 @@ func genWasmExportWrapper(s *obj.LSym, appendp func(p *obj.Prog, as obj.As, args
 	}
 	if p.Link != nil {
 		panic("wrapper functions for WASM export should not have a body")
+	}
+
+	if we.Async && strings.HasSuffix(s.Name, "_resume") {
+		genAsyncWasmExportWrapper(s, we, p, framesize, appendp)
+		return
 	}
 
 	// Detect and error out if called before runtime initialization
@@ -1099,14 +1168,15 @@ func assemble(ctxt *obj.Link, s *obj.LSym, newprog obj.ProgAlloc) {
 
 	hasLocalSP := false
 	regVars := [MAXREG - MINREG]*regVar{
-		REG_SP - MINREG:    {true, 0},
-		REG_CTXT - MINREG:  {true, 1},
-		REG_g - MINREG:     {true, 2},
-		REG_RET0 - MINREG:  {true, 3},
-		REG_RET1 - MINREG:  {true, 4},
-		REG_RET2 - MINREG:  {true, 5},
-		REG_RET3 - MINREG:  {true, 6},
-		REG_PAUSE - MINREG: {true, 7},
+		REG_SP - MINREG:      {true, 0},
+		REG_CTXT - MINREG:    {true, 1},
+		REG_g - MINREG:       {true, 2},
+		REG_RET0 - MINREG:    {true, 3},
+		REG_RET1 - MINREG:    {true, 4},
+		REG_RET2 - MINREG:    {true, 5},
+		REG_RET3 - MINREG:    {true, 6},
+		REG_PAUSE - MINREG:   {true, 7},
+		REG_SUSPEND - MINREG: {true, 8},
 	}
 	var varDecls []*varDecl
 	useAssemblyRegMap := func() {
@@ -1118,7 +1188,7 @@ func assemble(ctxt *obj.Link, s *obj.LSym, newprog obj.ProgAlloc) {
 	// Function starts with declaration of locals: numbers and types.
 	// Some functions use a special calling convention.
 	switch s.Name {
-	case "_rt0_wasm_js", "_rt0_wasm_wasip1", "_rt0_wasm_wasip1_lib",
+	case "_rt0_wasm_js", "_rt0_wasm_wasip1", "_rt0_wasm_wasip1_lib", "wasm_export_getsuspend",
 		"wasm_export_run", "wasm_export_resume", "wasm_export_getsp",
 		"wasm_pc_f_loop", "runtime.wasmDiv", "runtime.wasmTruncS", "runtime.wasmTruncU", "memeqbody":
 		varDecls = []*varDecl{}

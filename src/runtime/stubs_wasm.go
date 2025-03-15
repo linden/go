@@ -4,8 +4,6 @@
 
 package runtime
 
-import "internal/runtime/sys"
-
 // pause sets SP to newsp and pauses the execution of Go's WebAssembly
 // code until an event is triggered, or call back into Go.
 //
@@ -16,7 +14,3 @@ import "internal/runtime/sys"
 // call pause with newsp = internal/runtime/sys.GetCallerSP()-16 (another 8 is
 // the return PC pushed to the stack).
 func pause(newsp uintptr)
-
-func Pause() {
-	pause(sys.GetCallerSP() - 16)
-}

@@ -574,6 +574,9 @@ outer:
 			Get R0
 			I32Eq
 			If // PC_F == R0, we're at the stop PC
+				I32Const $0 // TODO: only needed for async, move to a custom `wasm_pc_f_loop_export_async` loop
+				Set SUSPEND
+
 				Get R1
 				I32Eqz
 				// Break if it is a normal return

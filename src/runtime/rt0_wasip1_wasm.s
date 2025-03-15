@@ -8,6 +8,8 @@
 TEXT _rt0_wasm_wasip1(SB),NOSPLIT,$0
 	I32Const $wasm_export_resume(SB)
 	Drop
+	I32Const $wasm_export_getsuspend(SB)
+	Drop
 
 	MOVD $runtime·wasmStack+(m0Stack__size-16)(SB), SP
 
@@ -26,3 +28,19 @@ TEXT wasm_export_resume(SB),NOSPLIT,$0
 	Call wasm_pc_f_loop(SB)
 
 	Return
+
+TEXT wasm_export_getsuspend(SB),NOSPLIT,$0
+	Get SUSPEND
+	Return
+
+// TODO: call `runtime.pause` here directly.
+TEXT runtime·suspend(SB), NOSPLIT, $0-8
+	MOVD newsp+0(FP), SP
+
+	I32Const $1
+	Set SUSPEND
+
+	I32Const $1
+	Set PAUSE
+	
+	RETUNWIND

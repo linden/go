@@ -750,6 +750,8 @@ func (ft *WasmFuncType) Read(b []byte) {
 type WasmExport struct {
 	WasmFuncType
 
+	Async bool
+
 	WrappedSym *LSym // the wrapped Go function
 	AuxSym     *LSym // aux symbol to pass metadata to the linker
 }

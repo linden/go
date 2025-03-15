@@ -275,6 +275,7 @@ const (
 	REG_RET2
 	REG_RET3
 	REG_PAUSE
+	REG_SUSPEND
 
 	// i32 locals
 	REG_R0

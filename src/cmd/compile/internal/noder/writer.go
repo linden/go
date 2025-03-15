@@ -1126,8 +1126,10 @@ func (w *writer) funcExt(obj *types2.Func) {
 		}
 		if we != nil {
 			w.String(we.Name)
+			w.Bool(we.Async)
 		} else {
 			w.String("")
+			w.Bool(false)
 		}
 	}
 
