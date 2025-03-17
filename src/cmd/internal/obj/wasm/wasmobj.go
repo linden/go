@@ -941,24 +941,31 @@ func genAsyncWasmExportWrapper(s *obj.LSym, we *obj.WasmExport, p *obj.Prog, fra
 		retAddr.Offset = 0
 	}
 
-	off := int64(8)
-
+	// Now that we've checked the SP, generate the prologue
 	if framesize > 0 {
-		off = framesize - 8
-	}
-
-	if off > 0 {
 		p = appendp(p, AGet, regAddr(REG_SP))
-		p = appendp(p, AI32Const, constAddr(off))
+		p = appendp(p, AI32Const, constAddr(framesize))
 		p = appendp(p, AI32Sub)
 		p = appendp(p, ASet, regAddr(REG_SP))
+		p.Spadj = int32(framesize)
 	}
 
+	// Call the Go function.
+	// XXX maybe use ACALL and let later phase expand? But we don't use PC_B. Maybe we should?
+	// Go calling convention expects we push a return PC before call.
+	// SP -= 8
+	p = appendp(p, AGet, regAddr(REG_SP))
+	p = appendp(p, AI32Const, constAddr(8))
+	p = appendp(p, AI32Sub)
+	p = appendp(p, ASet, regAddr(REG_SP))
+
+	// Return value is on the top of the stack, indicating whether to unwind the Wasm stack.
+	// In the unwinding case, we call wasm_pc_f_loop_export to handle stack switch and rewinding,
+	// until a normal return (non-unwinding) back to this function.
 	p = appendp(p, AI64Const, retAddr)
 	p = appendp(p, AI64Const, constAddr(16))
 	p = appendp(p, AI64ShrU)
 	p = appendp(p, AI32WrapI64)
-
 	p = appendp(p, ACall, obj.Addr{Type: obj.TYPE_MEM, Name: obj.NAME_EXTERN, Sym: wasm_pc_f_loop_export})
 
 	// Load result
@@ -983,6 +990,15 @@ func genAsyncWasmExportWrapper(s *obj.LSym, we *obj.WasmExport, p *obj.Prog, fra
 		default:
 			panic("bad result type")
 		}
+	}
+
+	// Epilogue. Cannot use ARET as we don't follow Go calling convention.
+	if framesize > 0 {
+		// SP += framesize
+		p = appendp(p, AGet, regAddr(REG_SP))
+		p = appendp(p, AI32Const, constAddr(framesize))
+		p = appendp(p, AI32Add)
+		p = appendp(p, ASet, regAddr(REG_SP))
 	}
 
 	p = appendp(p, AReturn)
