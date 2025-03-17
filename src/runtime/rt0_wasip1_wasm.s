@@ -6,8 +6,6 @@
 #include "textflag.h"
 
 TEXT _rt0_wasm_wasip1(SB),NOSPLIT,$0
-	I32Const $wasm_export_resume(SB)
-	Drop
 	I32Const $wasm_export_getsuspend(SB)
 	Drop
 
@@ -22,11 +20,6 @@ TEXT _rt0_wasm_wasip1(SB),NOSPLIT,$0
 
 TEXT _rt0_wasm_wasip1_lib(SB),NOSPLIT,$0
 	Call _rt0_wasm_wasip1(SB)
-	Return
-
-TEXT wasm_export_resume(SB),NOSPLIT,$0
-	Call wasm_pc_f_loop(SB)
-
 	Return
 
 TEXT wasm_export_getsuspend(SB),NOSPLIT,$0

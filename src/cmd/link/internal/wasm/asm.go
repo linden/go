@@ -421,7 +421,7 @@ func writeExportSec(ctxt *ld.Link, ldr *loader.Loader, lenHostImports int) {
 
 	switch buildcfg.GOOS {
 	case "wasip1":
-		writeUleb128(ctxt.Out, uint64(4+len(ldr.WasmExports))) // number of exports
+		writeUleb128(ctxt.Out, uint64(3+len(ldr.WasmExports))) // number of exports
 		var entry, entryExpName string
 		switch ctxt.BuildMode {
 		case ld.BuildModeExe:
@@ -437,14 +437,6 @@ func writeExportSec(ctxt *ld.Link, ldr *loader.Loader, lenHostImports int) {
 		}
 		idx := uint32(lenHostImports) + uint32(ldr.SymValue(s)>>16) - funcValueOffset
 		writeName(ctxt.Out, entryExpName)   // the wasi entrypoint
-		ctxt.Out.WriteByte(0x00)            // func export
-		writeUleb128(ctxt.Out, uint64(idx)) // funcidx
-		s = ldr.Lookup("wasm_export_resume", 0)
-		if s == 0 {
-			ld.Errorf("export symbol %s not defined", entry)
-		}
-		idx = uint32(lenHostImports) + uint32(ldr.SymValue(s)>>16) - funcValueOffset
-		writeName(ctxt.Out, "resume")       // the wasi entrypoint
 		ctxt.Out.WriteByte(0x00)            // func export
 		writeUleb128(ctxt.Out, uint64(idx)) // funcidx
 		s = ldr.Lookup("wasm_export_getsuspend", 0)
