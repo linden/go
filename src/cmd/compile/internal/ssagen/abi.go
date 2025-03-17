@@ -394,8 +394,7 @@ func genAsyncWasmExportWrapper(wrapped *ir.Func) {
 	abiConfig := AbiForBodylessFuncStackMap(wrapped)
 	abiInfo := abiConfig.ABIAnalyzeFuncType(wrapped.Type())
 	we.Results = resultsToWasmFields(wrapped, "go:wasmexport", abiInfo, abiInfo.OutParams())
-
-	setupWasmExport(fn, wrapped)
+	fn.LSym.Func().WasmExport = &we
 
 	pp := objw.NewProgs(fn, 0)
 	defer pp.Free()
